@@ -2,20 +2,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard, 
   Syringe, 
-  Utensils, 
-  Smile, 
   LineChart, 
   Plus, 
   ChevronRight, 
-  AlertCircle,
-  History,
   MapPin,
   Calendar,
-  Sparkles,
-  ArrowRight,
   Scale,
-  Droplets,
-  Minus
+  User,
+  Trash2,
+  Edit2,
+  Settings
 } from 'lucide-react';
 import { 
   LineChart as ReChart, 
@@ -27,29 +23,25 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { format, addDays, differenceInDays, parseISO, isToday } from 'date-fns';
-import { GoogleGenAI, Type } from "@google/genai";
-import Markdown from 'react-markdown';
 import { cn } from './lib/utils';
 import { 
   Shot, 
-  FoodEntry, 
-  FeelingEntry, 
   WeightEntry, 
-  Mood, 
-  INJECTION_SITES, 
-  COMMON_SIDE_EFFECTS 
+  BodyMeasurementEntry,
+  INJECTION_SITES 
 } from './types';
 
 // --- Persistence Helpers ---
 const STORAGE_KEYS = {
   SHOTS: 'mj_shots',
-  FOOD: 'mj_food',
   FEELINGS: 'mj_feelings',
   WEIGHT: 'mj_weight',
   PROFILE: 'mj_profile',
   UNIT: 'mj_unit',
   HEIGHT: 'mj_height',
-  HEIGHT_UNIT: 'mj_height_unit'
+  HEIGHT_UNIT: 'mj_height_unit',
+  MEASUREMENT_UNIT: 'mj_measurement_unit',
+  MEASUREMENTS: 'mj_measurements'
 };
 
 const load = <T,>(key: string, defaultValue: T): T => {
@@ -77,7 +69,7 @@ const Button = ({
   id
 }: { 
   children: React.ReactNode; 
-  onClick?: () => void; 
+  onClick?: (e: React.MouseEvent) => void; 
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
   className?: string;
   id?: string;
@@ -100,44 +92,33 @@ const Button = ({
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'shots' | 'log' | 'progress' | 'coach'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'shots' | 'body' | 'progress'>('dashboard');
   
   // Data State
   const [shots, setShots] = useState<Shot[]>(() => load(STORAGE_KEYS.SHOTS, []));
-  const [food, setFood] = useState<FoodEntry[]>(() => load(STORAGE_KEYS.FOOD, []));
-  const [feelings, setFeelings] = useState<FeelingEntry[]>(() => load(STORAGE_KEYS.FEELINGS, []));
   const [weight, setWeight] = useState<WeightEntry[]>(() => load(STORAGE_KEYS.WEIGHT, []));
+  const [measurements, setMeasurements] = useState<BodyMeasurementEntry[]>(() => load(STORAGE_KEYS.MEASUREMENTS, []));
   const [weightUnit, setWeightUnit] = useState<'lbs' | 'kg' | 'st'>(() => load(STORAGE_KEYS.UNIT, 'lbs'));
   const [height, setHeight] = useState<number | null>(() => load(STORAGE_KEYS.HEIGHT, null)); // stored in cm
   const [heightUnit, setHeightUnit] = useState<'cm' | 'ft'>(() => load(STORAGE_KEYS.HEIGHT_UNIT, 'cm'));
-  const [water, setWater] = useState<number>(() => load('mj_water', 0));
+  const [measurementUnit, setMeasurementUnit] = useState<'in' | 'cm'>(() => load(STORAGE_KEYS.MEASUREMENT_UNIT, 'in'));
   
   // UI State
   const [showAddShot, setShowAddShot] = useState(false);
   const [showAddWeight, setShowAddWeight] = useState(false);
+  const [editingWeight, setEditingWeight] = useState<WeightEntry | null>(null);
+  const [editingMeasurement, setEditingMeasurement] = useState<BodyMeasurementEntry | null>(null);
   const [showAddHeight, setShowAddHeight] = useState(false);
-  const [coachResponse, setCoachResponse] = useState<string>('');
-  const [isCoachLoading, setIsCoachLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Sync to LocalStorage
   useEffect(() => save(STORAGE_KEYS.SHOTS, shots), [shots]);
-  useEffect(() => save(STORAGE_KEYS.FOOD, food), [food]);
-  useEffect(() => save(STORAGE_KEYS.FEELINGS, feelings), [feelings]);
   useEffect(() => save(STORAGE_KEYS.WEIGHT, weight), [weight]);
   useEffect(() => save(STORAGE_KEYS.UNIT, weightUnit), [weightUnit]);
   useEffect(() => save(STORAGE_KEYS.HEIGHT, height), [height]);
   useEffect(() => save(STORAGE_KEYS.HEIGHT_UNIT, heightUnit), [heightUnit]);
-  useEffect(() => save('mj_water', water), [water]);
-
-  // Reset water daily
-  useEffect(() => {
-    const lastReset = localStorage.getItem('mj_water_reset');
-    const today = format(new Date(), 'yyyy-MM-dd');
-    if (lastReset !== today) {
-      setWater(0);
-      localStorage.setItem('mj_water_reset', today);
-    }
-  }, []);
+  useEffect(() => save(STORAGE_KEYS.MEASUREMENT_UNIT, measurementUnit), [measurementUnit]);
+  useEffect(() => save(STORAGE_KEYS.MEASUREMENTS, measurements), [measurements]);
 
   // Derived Values
   const lastShot = shots.length > 0 ? shots[shots.length - 1] : null;
@@ -168,10 +149,6 @@ export default function App() {
     return (weightKg / (heightM * heightM)).toFixed(1);
   }, [currentWeight, height]);
 
-  const todayFood = useMemo(() => food.filter(f => isToday(parseISO(f.timestamp))), [food]);
-  const todayCalories = useMemo(() => todayFood.reduce((sum, f) => sum + (Number(f.calories) || 0), 0), [todayFood]);
-  const todayProtein = useMemo(() => todayFood.reduce((sum, f) => sum + (Number(f.protein) || 0), 0), [todayFood]);
-
   // --- Handlers ---
   const addShot = (dose: string, site: string, date?: string) => {
     const newShot: Shot = {
@@ -194,232 +171,171 @@ export default function App() {
     setShowAddWeight(false);
   };
 
-  const addFood = (name: string, calories: number, protein: number, notes?: string) => {
-    const newEntry: FoodEntry = {
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      name,
-      calories,
-      protein,
-      notes
-    };
-    setFood([...food, newEntry]);
+  const deleteWeight = (id: string) => {
+    setWeight(weight.filter(w => w.id !== id));
   };
 
-  const addFeeling = (mood: Mood, sideEffects: string[], notes: string) => {
-    const newEntry: FeelingEntry = {
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      mood,
-      sideEffects,
-      notes
-    };
-    setFeelings([...feelings, newEntry]);
+  const updateWeight = (id: string, val: number) => {
+    setWeight(weight.map(w => w.id === id ? { ...w, weight: val } : w));
   };
 
-  const askCoach = async () => {
-    setIsCoachLoading(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const model = "gemini-3-flash-preview";
-      
-      const context = `
-        User is on a weight loss journey using Mounjaro.
-        Current Weight: ${currentWeight} lbs (Total lost: ${totalLost} lbs).
-        Today's Intake: ${todayCalories} calories, ${todayProtein}g protein.
-        Latest Mood: ${feelings[feelings.length - 1]?.mood || 'Not logged'}.
-        Side Effects: ${feelings[feelings.length - 1]?.sideEffects.join(', ') || 'None'}.
-        
-        Provide a brief, encouraging, and helpful tip for today. 
-        If Today's Intake is 0, remind them to log their meals using the AI estimator.
-        Focus on protein, hydration, or managing side effects if any are present.
-      `;
-
-      const response = await ai.models.generateContent({
-        model,
-        contents: context,
+  const addMeasurement = (data: Partial<Omit<BodyMeasurementEntry, 'id' | 'date'>>) => {
+    const lastEntry = measurements.length > 0 ? measurements[measurements.length - 1] : {};
+    
+    // Convert to inches if currently in cm mode
+    const processedData = { ...data };
+    if (measurementUnit === 'cm') {
+      Object.keys(processedData).forEach(key => {
+        const k = key as keyof typeof processedData;
+        if (typeof processedData[k] === 'number') {
+          (processedData as any)[k] = (processedData[k] as number) / 2.54;
+        }
       });
-      setCoachResponse(response.text || "I'm here to support you! Keep focusing on your protein and hydration.");
-    } catch (error) {
-      console.error(error);
-      setCoachResponse("Sorry, I'm having trouble connecting right now. Remember to drink plenty of water!");
-    } finally {
-      setIsCoachLoading(false);
     }
+
+    const newEntry: BodyMeasurementEntry = {
+      ...lastEntry,
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      ...processedData
+    };
+    setMeasurements([...measurements, newEntry]);
+  };
+
+  const deleteMeasurement = (id: string) => {
+    setMeasurements(measurements.filter(m => m.id !== id));
+  };
+
+  const updateMeasurement = (id: string, data: Partial<Omit<BodyMeasurementEntry, 'id' | 'date'>>) => {
+    // Convert to inches if currently in cm mode
+    const processedData = { ...data };
+    if (measurementUnit === 'cm') {
+      Object.keys(processedData).forEach(key => {
+        const k = key as keyof typeof processedData;
+        if (typeof processedData[k] === 'number') {
+          (processedData as any)[k] = (processedData[k] as number) / 2.54;
+        }
+      });
+    }
+    setMeasurements(measurements.map(m => m.id === id ? { ...m, ...processedData } : m));
   };
 
   // --- Views ---
 
+  const measurementParts = [
+    { id: 'neck', label: 'Neck' },
+    { id: 'chest', label: 'Chest' },
+    { id: 'arms', label: 'Arms' },
+    { id: 'waist', label: 'Waist' },
+    { id: 'hips', label: 'Hips' },
+    { id: 'thighs', label: 'Thighs' },
+  ];
+
   const DashboardView = () => (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-4 pb-20">
       <header className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">My Journey</h1>
-          <p className="text-slate-500 text-sm">{format(new Date(), 'EEEE, MMMM do')}</p>
+          <h1 className="text-xl font-bold text-slate-900">My Journey</h1>
+          <p className="text-slate-500 text-xs">{format(new Date(), 'EEEE, MMMM do')}</p>
         </div>
-        <div className="bg-emerald-50 p-2 rounded-full">
-          <Sparkles className="w-6 h-6 text-emerald-600" />
-        </div>
+        <button 
+          onClick={() => setShowSettings(true)}
+          className="p-2 bg-white rounded-xl shadow-sm border border-slate-100 text-slate-400 hover:text-emerald-600 transition-colors"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
       </header>
 
-      {/* Shot Countdown */}
-      <Card className="bg-gradient-to-br from-emerald-600 to-teal-700 text-white border-none">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-emerald-100 text-xs font-medium uppercase tracking-wider">Next Shot In</p>
-            <h2 className="text-4xl font-bold mt-1">
-              {daysUntilNextShot !== null ? (daysUntilNextShot <= 0 ? 'Today!' : `${daysUntilNextShot} Days`) : 'Set first shot'}
-            </h2>
-            <p className="text-emerald-100 text-sm mt-2">
-              {nextShotDate ? `Due ${format(nextShotDate, 'MMM do')}` : 'Log your first injection to start tracking'}
-            </p>
-          </div>
-          <Syringe className="w-12 h-12 text-white/20" />
-        </div>
-        <Button 
-          variant="secondary" 
-          className="w-full mt-4 bg-white/20 hover:bg-white/30 border-none text-white"
-          onClick={() => setShowAddShot(true)}
-        >
-          <Plus className="w-4 h-4" /> Log Shot
-        </Button>
-      </Card>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-4">
-        <Card className="flex flex-col justify-between">
-          <div className="flex justify-between items-start">
-            <Scale className="w-5 h-5 text-blue-500" />
-            <div className="flex gap-1">
-              {(['lbs', 'kg', 'st'] as const).map(u => (
-                <button 
-                  key={u}
-                  onClick={() => setWeightUnit(u)}
-                  className={cn(
-                    "text-[8px] font-bold px-1.5 py-0.5 rounded-full transition-all",
-                    weightUnit === u ? "bg-blue-500 text-white" : "bg-blue-50 text-blue-400 hover:bg-blue-100"
-                  )}
-                >
-                  {u.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="mt-4">
-            <p className="text-slate-500 text-xs">Current Weight</p>
-            <p className="text-xl font-bold text-slate-900">{formatWeight(currentWeight)}</p>
-            {totalLostDisplay && (
-              <p className="text-[10px] font-bold text-blue-500 mt-1">
-                Total lost: {totalLostDisplay}
+      {/* Weight Info Circles */}
+      <div className="flex justify-center items-center gap-4 py-2">
+        <div className="flex flex-col items-center">
+          <div className="w-40 h-40 rounded-full bg-white border-4 border-emerald-500 shadow-xl flex flex-col items-center justify-center p-4 text-center">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current</p>
+            <div className="flex items-baseline gap-0.5">
+              <p className="text-4xl font-black text-slate-900 leading-none">
+                {currentWeight ? (
+                  weightUnit === 'kg' ? (currentWeight / 2.20462).toFixed(1) : 
+                  weightUnit === 'st' ? Math.floor(currentWeight / 14) : 
+                  currentWeight.toFixed(1)
+                ) : '--'}
               </p>
-            )}
-          </div>
-          <Button variant="ghost" className="p-0 h-auto mt-2 text-xs justify-start" onClick={() => setShowAddWeight(true)}>
-            Update <ChevronRight className="w-3 h-3" />
-          </Button>
-        </Card>
-
-        <Card className="flex flex-col justify-between">
-          <div className="flex justify-between items-start">
-            <Utensils className="w-5 h-5 text-orange-500" />
-            <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full">
-              {todayProtein}g Protein
-            </span>
-          </div>
-          <div className="mt-4">
-            <p className="text-slate-500 text-xs">Today's Calories</p>
-            <p className={cn("text-xl font-bold", todayCalories > 0 ? "text-slate-900" : "text-slate-300")}>
-              {todayCalories > 0 ? `${todayCalories} kcal` : '0 kcal'}
-            </p>
-          </div>
-          <Button variant="ghost" className="p-0 h-auto mt-2 text-xs justify-start" onClick={() => setActiveTab('log')}>
-            {todayCalories > 0 ? 'Log More' : 'Log Meal'} <ChevronRight className="w-3 h-3" />
-          </Button>
-        </Card>
-      </div>
-
-      {/* Water Tracking */}
-      <Card className="flex items-center justify-between bg-blue-50/50 border-blue-100">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-100 p-2 rounded-xl">
-            <Droplets className="w-5 h-5 text-blue-600" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">Hydration</h3>
-            <p className="text-xs text-slate-500">{water} glasses today</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={() => setWater(Math.max(0, water - 1))}
-            className="p-2 bg-white rounded-lg border border-blue-200 text-blue-600 active:scale-90 transition-all"
-          >
-            <Minus className="w-4 h-4" />
-          </button>
-          <button 
-            onClick={() => setWater(water + 1)}
-            className="p-2 bg-blue-600 rounded-lg text-white active:scale-90 transition-all shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
-      </Card>
-
-      {/* Coach Quick Tip */}
-      <Card className="bg-slate-50 border-dashed border-slate-300">
-        <div className="flex gap-3">
-          <div className="bg-white p-2 rounded-xl shadow-sm h-fit">
-            <Sparkles className="w-5 h-5 text-emerald-500" />
-          </div>
-          <div>
-            <h3 className="font-bold text-slate-900 text-sm">Daily Coach Tip</h3>
-            <p className="text-slate-600 text-xs mt-1 leading-relaxed">
-              {coachResponse || "Log your food and feelings to get personalized advice from your AI coach."}
-            </p>
-            {!coachResponse && (
-              <Button 
-                variant="outline" 
-                className="mt-3 text-xs py-1.5 h-auto" 
-                onClick={askCoach}
-                id="ask-coach-btn"
-              >
-                {isCoachLoading ? 'Thinking...' : 'Get Tip'}
-              </Button>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      {/* Recent Activity */}
-      <div className="space-y-3">
-        <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-          <History className="w-4 h-4" /> Recent Activity
-        </h3>
-        {[...food, ...feelings, ...shots]
-          .sort((a, b) => new Date((a as any).timestamp || (a as any).date).getTime() - new Date((b as any).timestamp || (b as any).date).getTime())
-          .reverse()
-          .slice(0, 3)
-          .map((item: any) => (
-            <div key={item.id} className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
-              <div className={cn(
-                "p-2 rounded-lg",
-                item.name ? "bg-orange-50 text-orange-500" : 
-                item.mood ? "bg-purple-50 text-purple-500" : 
-                "bg-emerald-50 text-emerald-500"
-              )}>
-                {item.name ? <Utensils className="w-4 h-4" /> : item.mood ? <Smile className="w-4 h-4" /> : <Syringe className="w-4 h-4" />}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-slate-900">
-                  {item.name || (item.mood ? `Feeling ${item.mood}` : `Shot: ${item.dose}`)}
+              {weightUnit === 'st' && currentWeight && (
+                <p className="text-base font-bold text-slate-900">
+                  {Math.round((currentWeight / 14 - Math.floor(currentWeight / 14)) * 14)}
                 </p>
-                <p className="text-[10px] text-slate-400">
-                  {format(parseISO(item.timestamp || item.date), 'h:mm a')}
-                </p>
-              </div>
+              )}
             </div>
-          ))}
+            <p className="text-[10px] font-bold text-emerald-600 uppercase mt-1">{weightUnit}</p>
+          </div>
+        </div>
+
+        {totalLostDisplay && (
+          <div className="flex flex-col items-center">
+            <div className="w-28 h-28 rounded-full bg-emerald-600 shadow-lg flex flex-col items-center justify-center p-3 text-center text-white">
+              <p className="text-[8px] font-bold text-emerald-100 uppercase tracking-widest mb-0.5">Total Lost</p>
+              <p className="text-xl font-black leading-none">
+                {totalLost ? (
+                  weightUnit === 'kg' ? (parseFloat(totalLost) / 2.20462).toFixed(1) : 
+                  weightUnit === 'st' ? (parseFloat(totalLost) / 14).toFixed(1) : 
+                  totalLost
+                ) : '--'}
+              </p>
+              <p className="text-[8px] font-bold text-emerald-100 uppercase mt-0.5">{weightUnit}</p>
+            </div>
+          </div>
+        )}
       </div>
+
+      <div className="px-4 space-y-2">
+        <Button 
+          className="w-full py-4 rounded-2xl shadow-md bg-emerald-600 hover:bg-emerald-700 text-base font-bold flex items-center justify-center gap-2"
+          onClick={() => setShowAddWeight(true)}
+        >
+          <Scale className="w-5 h-5" /> Update Weight
+        </Button>
+        
+        {currentBMI && (
+          <div className="flex justify-center">
+            <div className="bg-white px-3 py-1 rounded-full border border-slate-100 shadow-sm flex items-center gap-2">
+              <User className="w-3 h-3 text-slate-400" />
+              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">
+                Current BMI: <span className="text-emerald-600">{currentBMI}</span>
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Shot Countdown */}
+      <Card className="bg-white border-slate-100 shadow-sm overflow-hidden">
+        <div className="flex justify-between items-center p-3">
+          <div className="flex items-center gap-3">
+            <div className="bg-emerald-50 p-2 rounded-xl">
+              <Syringe className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-slate-500 text-[9px] font-bold uppercase tracking-wider">Next Shot</p>
+              <h2 className="text-lg font-bold text-slate-900">
+                {daysUntilNextShot !== null ? (daysUntilNextShot <= 0 ? 'Today!' : `${daysUntilNextShot} Days`) : 'Set first shot'}
+              </h2>
+            </div>
+          </div>
+          <Button 
+            variant="ghost" 
+            className="text-emerald-600 font-bold text-[10px] h-8"
+            onClick={() => setShowAddShot(true)}
+          >
+            Log <Plus className="w-3 h-3 ml-0.5" />
+          </Button>
+        </div>
+        {nextShotDate && (
+          <div className="bg-slate-50 px-3 py-1.5 border-t border-slate-100">
+            <p className="text-[9px] text-slate-400 font-medium">
+              Due {format(nextShotDate, 'EEEE, MMM do')}
+            </p>
+          </div>
+        )}
+      </Card>
     </div>
   );
 
@@ -481,224 +397,115 @@ export default function App() {
     </div>
   );
 
-  const LogView = () => {
-    const [logType, setLogType] = useState<'food' | 'feeling'>('food');
-    const [foodName, setFoodName] = useState('');
-    const [cals, setCals] = useState('');
-    const [prot, setProt] = useState('');
-    const [isEstimating, setIsEstimating] = useState(false);
-    const [selectedMood, setSelectedMood] = useState<Mood>('Good');
-    const [selectedSideEffects, setSelectedSideEffects] = useState<string[]>([]);
-    const [notes, setNotes] = useState('');
+  const BodyView = () => {
+    const [selectedPart, setSelectedPart] = useState<keyof Omit<BodyMeasurementEntry, 'id' | 'date'> | null>(null);
+    const [inputValue, setInputValue] = useState('');
 
-    const handleEstimate = async () => {
-      if (!foodName.trim()) return;
-      setIsEstimating(true);
-      try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: `Estimate the calories and protein for this meal: "${foodName}". Provide a realistic estimate for a standard serving size.`,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                calories: { type: Type.INTEGER },
-                protein: { type: Type.INTEGER },
-                servingSize: { type: Type.STRING }
-              },
-              required: ["calories", "protein"]
-            }
-          }
-        });
+    const lastMeasurements = measurements.length > 0 ? measurements[measurements.length - 1] : null;
 
-        const data = JSON.parse(response.text || '{}');
-        if (data.calories) setCals(data.calories.toString());
-        if (data.protein) setProt(data.protein.toString());
-        if (data.servingSize) setNotes(prev => prev ? `${prev}\nEstimated for: ${data.servingSize}` : `Estimated for: ${data.servingSize}`);
-      } catch (error) {
-        console.error("Estimation error:", error);
-      } finally {
-        setIsEstimating(false);
+    const handleSave = () => {
+      if (selectedPart && inputValue) {
+        addMeasurement({ [selectedPart]: parseFloat(inputValue) });
+        // We keep it open so the user can see the button change to "Update"
       }
     };
 
-    const handleFoodSubmit = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!foodName) return;
-      
-      const calories = parseInt(cals) || 0;
-      const protein = parseInt(prot) || 0;
-      
-      addFood(foodName, calories, protein, notes);
-      setFoodName(''); setCals(''); setProt(''); setNotes('');
-      
-      // Show a quick success feedback before switching
-      const btn = e.currentTarget.querySelector('button[type="submit"]');
-      if (btn) {
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '✓ Logged!';
-        btn.classList.add('bg-emerald-500');
-        setTimeout(() => {
-          btn.innerHTML = originalText;
-          btn.classList.remove('bg-emerald-500');
-          setActiveTab('dashboard');
-        }, 600);
-      } else {
-        setActiveTab('dashboard');
-      }
-    };
-
-    const handleFeelingSubmit = (e: React.FormEvent) => {
-      e.preventDefault();
-      addFeeling(selectedMood, selectedSideEffects, notes);
-      setSelectedMood('Good'); setSelectedSideEffects([]); setNotes('');
-      setActiveTab('dashboard');
-    };
+    const parts = [
+      { id: 'neck', label: 'Neck', x: 50, y: 12 },
+      { id: 'chest', label: 'Chest', x: 50, y: 24 },
+      { id: 'arms', label: 'Arms', x: 22, y: 35 },
+      { id: 'waist', label: 'Waist', x: 50, y: 40 },
+      { id: 'hips', label: 'Hips', x: 50, y: 52 },
+      { id: 'thighs', label: 'Thighs', x: 38, y: 72 },
+    ];
 
     return (
       <div className="space-y-6 pb-24">
         <header>
-          <h1 className="text-2xl font-bold text-slate-900">Daily Log</h1>
-          <p className="text-slate-500 text-sm">Track your intake and wellness</p>
+          <h1 className="text-2xl font-bold text-slate-900">Body Measurements</h1>
+          <p className="text-slate-500 text-sm">Enter your measurements in {measurementUnit === 'in' ? 'inches' : 'centimeters'}</p>
         </header>
 
-        <div className="flex p-1 bg-slate-100 rounded-xl">
-          <button 
-            className={cn("flex-1 py-2 rounded-lg text-sm font-medium transition-all", logType === 'food' ? "bg-white shadow-sm text-slate-900" : "text-slate-500")}
-            onClick={() => setLogType('food')}
-          >
-            Food
-          </button>
-          <button 
-            className={cn("flex-1 py-2 rounded-lg text-sm font-medium transition-all", logType === 'feeling' ? "bg-white shadow-sm text-slate-900" : "text-slate-500")}
-            onClick={() => setLogType('feeling')}
-          >
-            Feelings
-          </button>
+        <div className="grid grid-cols-2 gap-4">
+          {parts.map(part => {
+            const rawVal = lastMeasurements?.[part.id as keyof BodyMeasurementEntry] as number | undefined;
+            const val = rawVal !== undefined ? (measurementUnit === 'cm' ? parseFloat((rawVal * 2.54).toFixed(1)) : rawVal) : undefined;
+            const isSelected = selectedPart === part.id;
+
+            return (
+              <div 
+                key={part.id} 
+                onClick={() => {
+                  if (!isSelected) {
+                    setSelectedPart(part.id as any);
+                    setInputValue(val?.toString() || '');
+                  }
+                }}
+                className={cn(
+                  "w-full flex flex-col items-center justify-center py-6 rounded-2xl border transition-all shadow-sm cursor-pointer min-h-[120px]",
+                  isSelected 
+                    ? "bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20" 
+                    : "bg-white border-slate-100 hover:border-emerald-200"
+                )}
+              >
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{part.label}</p>
+                
+                {isSelected ? (
+                  <div className="flex flex-col items-center gap-2 px-3 w-full animate-in zoom-in-95 duration-200">
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="0.0"
+                      className="w-full p-2 bg-white rounded-xl border border-emerald-200 outline-none font-bold text-xl text-center"
+                      value={inputValue}
+                      onChange={e => setInputValue(e.target.value)}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSave();
+                        if (e.key === 'Escape') setSelectedPart(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <div className="flex gap-1 w-full">
+                      <Button onClick={(e) => { e?.stopPropagation(); handleSave(); }} className="flex-1 py-1.5 text-xs h-8">
+                        {val ? 'Update' : 'Save'}
+                      </Button>
+                      <Button variant="ghost" onClick={(e) => { e?.stopPropagation(); setSelectedPart(null); setInputValue(''); }} className="px-2 py-1.5 text-xs h-8">
+                        ✕
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-2xl font-bold text-slate-900">{val ? `${val}${measurementUnit === 'in' ? '"' : ' cm'}` : '--'}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
 
-        {logType === 'food' ? (
-          <form onSubmit={handleFoodSubmit} className="space-y-4">
-            <p className="text-[10px] text-slate-400 italic">
-              Tip: Type your meal and tap "AI Estimate" to automatically calculate calories. Remember to tap "Log Food" below to save it!
-            </p>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-bold text-slate-500 uppercase">What did you eat?</label>
-                <button 
-                  type="button"
-                  onClick={handleEstimate}
-                  disabled={isEstimating || !foodName.trim()}
-                  className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Sparkles className="w-3 h-3" /> {isEstimating ? 'Estimating...' : 'AI Estimate'}
-                </button>
-              </div>
-              <input 
-                type="text" 
-                placeholder="e.g. Grilled Chicken Salad"
-                className="w-full p-4 bg-white rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
-                value={foodName}
-                onChange={e => setFoodName(e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase">Calories (kcal)</label>
-                <input 
-                  type="number" 
-                  placeholder="0"
-                  className="w-full p-4 bg-white rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  value={cals}
-                  onChange={e => setCals(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase">Protein (g)</label>
-                <input 
-                  type="number" 
-                  placeholder="0"
-                  className="w-full p-4 bg-white rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  value={prot}
-                  onChange={e => setProt(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase">Notes / Serving Size</label>
-              <input 
-                type="text" 
-                placeholder="e.g. 1 medium bowl"
-                className="w-full p-4 bg-white rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-              />
-            </div>
-            <Button className="w-full py-4 mt-4">Log Food</Button>
-          </form>
-        ) : (
-          <form onSubmit={handleFeelingSubmit} className="space-y-6">
-            <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-500 uppercase">Current Mood</label>
-              <div className="grid grid-cols-5 gap-2">
-                {(['Bad', 'Poor', 'Okay', 'Good', 'Great'] as Mood[]).map(m => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setSelectedMood(m)}
-                    className={cn(
-                      "py-3 rounded-xl border text-xl transition-all",
-                      selectedMood === m ? "bg-emerald-600 border-emerald-600 text-white" : "bg-white border-slate-200 text-slate-400"
-                    )}
-                  >
-                    {m === 'Great' ? '🤩' : m === 'Good' ? '😊' : m === 'Okay' ? '😐' : m === 'Poor' ? '😔' : '😫'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <label className="text-xs font-bold text-slate-500 uppercase">Side Effects</label>
-              <div className="flex flex-wrap gap-2">
-                {COMMON_SIDE_EFFECTS.map(se => (
-                  <button
-                    key={se}
-                    type="button"
-                    onClick={() => {
-                      setSelectedSideEffects(prev => 
-                        prev.includes(se) ? prev.filter(x => x !== se) : [...prev, se]
-                      );
-                    }}
-                    className={cn(
-                      "px-3 py-2 rounded-full text-xs font-medium border transition-all",
-                      selectedSideEffects.includes(se) ? "bg-purple-100 border-purple-200 text-purple-700" : "bg-white border-slate-200 text-slate-500"
-                    )}
-                  >
-                    {se}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase">Notes</label>
-              <textarea 
-                placeholder="How are you really feeling?"
-                className="w-full p-4 bg-white rounded-2xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[100px]"
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-              />
-            </div>
-            <Button className="w-full py-4">Log Feeling</Button>
-          </form>
+        {measurements.length > 0 && (
+          <div className="pt-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 text-center">Last Updated: {format(parseISO(measurements[measurements.length - 1].date), 'MMM do, yyyy')}</p>
+          </div>
         )}
       </div>
     );
   };
 
   const ProgressView = () => {
+    const getMeasurementChartData = (partId: string) => {
+      return measurements
+        .filter(m => m[partId as keyof BodyMeasurementEntry] !== undefined)
+        .map(m => {
+          const rawValue = m[partId as keyof BodyMeasurementEntry] as number;
+          const displayValue = measurementUnit === 'cm' ? parseFloat((rawValue * 2.54).toFixed(1)) : rawValue;
+          return {
+            date: format(parseISO(m.date), 'MMM d'),
+            value: displayValue
+          };
+        });
+    };
+
     const chartData = useMemo(() => {
       return weight.map(w => {
         let val = w.weight;
@@ -766,109 +573,130 @@ export default function App() {
           </Card>
         </div>
 
+        <div className="space-y-4">
+          <h3 className="font-bold text-slate-900 text-sm">Measurement Progress</h3>
+          <div className="grid grid-cols-1 gap-4">
+            {measurementParts.map(part => {
+              const data = getMeasurementChartData(part.id);
+              if (data.length < 2) return null;
+
+              return (
+                <Card key={part.id} className="h-[200px] p-2">
+                  <h3 className="text-[10px] font-bold text-slate-400 uppercase mb-2 px-2">{part.label} Progress ({measurementUnit === 'in' ? 'Inches' : 'CM'})</h3>
+                  <ResponsiveContainer width="100%" height="80%">
+                    <ReChart data={data}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="date" fontSize={8} tickLine={false} axisLine={false} />
+                      <YAxis domain={['auto', 'auto']} fontSize={8} tickLine={false} axisLine={false} />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: '10px' }}
+                        labelStyle={{ fontWeight: 'bold' }}
+                        formatter={(value: number) => [`${value}${measurementUnit === 'in' ? '"' : ' cm'}`, part.label]}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="value" 
+                        stroke="#3b82f6" 
+                        strokeWidth={2} 
+                        dot={{ fill: '#3b82f6', r: 3 }} 
+                        activeDot={{ r: 5, strokeWidth: 0 }}
+                      />
+                    </ReChart>
+                  </ResponsiveContainer>
+                </Card>
+              );
+            })}
+            {measurements.length < 2 && (
+              <Card className="py-8 text-center text-slate-400">
+                <p className="text-xs">Log measurements on at least 2 different days to see progress charts.</p>
+              </Card>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <h3 className="font-bold text-slate-900 text-sm">Measurement History</h3>
+          {measurements.length === 0 ? (
+            <Card className="py-8 text-center text-slate-400">
+              <p className="text-xs">No measurements logged yet.</p>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {[...measurements].reverse().map(m => (
+                <Card key={m.id} className="p-3 group">
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="text-xs font-bold text-slate-900">{format(parseISO(m.date), 'MMM do, yyyy')}</p>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => setEditingMeasurement(m)}
+                        className="p-1 text-slate-400 hover:text-blue-500"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          if (confirm('Delete this measurement entry?')) {
+                            deleteMeasurement(m.id);
+                          }
+                        }}
+                        className="p-1 text-slate-400 hover:text-red-500"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {Object.entries(m).map(([key, rawVal]) => {
+                      if (key === 'id' || key === 'date' || rawVal === undefined) return null;
+                      const val = measurementUnit === 'cm' ? parseFloat(((rawVal as number) * 2.54).toFixed(1)) : rawVal as number;
+                      return (
+                        <div key={key} className="bg-slate-50 p-2 rounded-lg text-center">
+                          <p className="text-[8px] font-bold text-slate-400 uppercase">{key}</p>
+                          <p className="text-xs font-bold text-slate-900">{val}{measurementUnit === 'in' ? '"' : 'cm'}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="space-y-3">
           <h3 className="font-bold text-slate-900 text-sm">Weight Log</h3>
           {[...weight].reverse().map(w => (
-            <div key={w.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
-              <p className="text-sm font-medium text-slate-900">{format(parseISO(w.date), 'MMM do, yyyy')}</p>
-              <p className="text-sm font-bold text-emerald-600">{formatWeight(w.weight)}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const CoachView = () => {
-    const [chatInput, setChatInput] = useState('');
-    const [chatHistory, setChatHistory] = useState<{role: 'user' | 'ai', text: string}[]>([]);
-
-    const handleChat = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!chatInput.trim()) return;
-
-      const userMsg = chatInput;
-      setChatInput('');
-      setChatHistory(prev => [...prev, { role: 'user', text: userMsg }]);
-      setIsCoachLoading(true);
-
-      try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const model = "gemini-3-flash-preview";
-        
-        const prompt = `
-          You are a supportive weight loss coach for someone on Mounjaro. 
-          User just said: "${userMsg}"
-          
-          Context:
-          Current Weight: ${currentWeight} lbs.
-          Total Lost: ${totalLost} lbs.
-          Latest Side Effects: ${feelings[feelings.length - 1]?.sideEffects.join(', ') || 'None'}.
-          
-          Provide a helpful, empathetic response. Keep it concise and encouraging.
-        `;
-
-        const response = await ai.models.generateContent({ model, contents: prompt });
-        setChatHistory(prev => [...prev, { role: 'ai', text: response.text || "I'm here for you! Keep going." }]);
-      } catch (error) {
-        setChatHistory(prev => [...prev, { role: 'ai', text: "Sorry, I'm having trouble connecting. But don't give up!" }]);
-      } finally {
-        setIsCoachLoading(false);
-      }
-    };
-
-    return (
-      <div className="flex flex-col h-[calc(100vh-160px)] pb-24">
-        <header className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">AI Coach</h1>
-          <p className="text-slate-500 text-sm">Get advice and support anytime</p>
-        </header>
-
-        <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 scrollbar-hide">
-          {chatHistory.length === 0 && (
-            <div className="text-center py-12">
-              <div className="bg-emerald-50 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4">
-                <Sparkles className="w-8 h-8 text-emerald-600" />
+            <div key={w.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-100 shadow-sm group">
+              <div className="flex flex-col">
+                <p className="text-sm font-medium text-slate-900">{format(parseISO(w.date), 'MMM do, yyyy')}</p>
+                <p className="text-xs text-slate-400">{format(parseISO(w.date), 'HH:mm')}</p>
               </div>
-              <h3 className="font-bold text-slate-900">How can I help today?</h3>
-              <p className="text-slate-500 text-sm mt-2 px-8">Ask about nutrition, managing side effects, or just get some motivation.</p>
-            </div>
-          )}
-          {chatHistory.map((msg, i) => (
-            <div key={i} className={cn("flex", msg.role === 'user' ? "justify-end" : "justify-start")}>
-              <div className={cn(
-                "max-w-[85%] p-4 rounded-2xl text-sm",
-                msg.role === 'user' ? "bg-emerald-600 text-white rounded-tr-none" : "bg-white border border-slate-100 shadow-sm text-slate-700 rounded-tl-none"
-              )}>
-                <Markdown>{msg.text}</Markdown>
-              </div>
-            </div>
-          ))}
-          {isCoachLoading && (
-            <div className="flex justify-start">
-              <div className="bg-white border border-slate-100 shadow-sm p-4 rounded-2xl rounded-tl-none">
-                <div className="flex gap-1">
-                  <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" />
-                  <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:0.2s]" />
-                  <div className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce [animation-delay:0.4s]" />
+              <div className="flex items-center gap-3">
+                <p className="text-sm font-bold text-emerald-600">{formatWeight(w.weight)}</p>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button 
+                    onClick={() => {
+                      setEditingWeight(w);
+                    }}
+                    className="p-1 text-slate-400 hover:text-blue-500"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      if (confirm('Delete this weight entry?')) {
+                        deleteWeight(w.id);
+                      }
+                    }}
+                    className="p-1 text-slate-400 hover:text-red-500"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
-          )}
+          ))}
         </div>
-
-        <form onSubmit={handleChat} className="relative">
-          <input 
-            type="text" 
-            placeholder="Ask your coach..."
-            className="w-full p-4 pr-12 bg-white rounded-2xl border border-slate-200 shadow-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-            value={chatInput}
-            onChange={e => setChatInput(e.target.value)}
-          />
-          <button type="submit" className="absolute right-3 top-3 p-2 bg-emerald-600 text-white rounded-xl active:scale-90 transition-all">
-            <ArrowRight className="w-5 h-5" />
-          </button>
-        </form>
       </div>
     );
   };
@@ -878,9 +706,8 @@ export default function App() {
       <div className="max-w-md mx-auto px-4 pt-6">
         {activeTab === 'dashboard' && <DashboardView />}
         {activeTab === 'shots' && <ShotsView />}
-        {activeTab === 'log' && <LogView />}
+        {activeTab === 'body' && <BodyView />}
         {activeTab === 'progress' && <ProgressView />}
-        {activeTab === 'coach' && <CoachView />}
       </div>
 
       {/* Bottom Navigation */}
@@ -893,17 +720,13 @@ export default function App() {
           <Syringe className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-tighter">Shots</span>
         </button>
-        <button onClick={() => setActiveTab('log')} className={cn("flex flex-col items-center gap-1", activeTab === 'log' ? "text-emerald-600" : "text-slate-400")}>
-          <Plus className="w-8 h-8 bg-emerald-600 text-white rounded-2xl shadow-lg -mt-8 border-4 border-slate-50" />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Log</span>
+        <button onClick={() => setActiveTab('body')} className={cn("flex flex-col items-center gap-1", activeTab === 'body' ? "text-emerald-600" : "text-slate-400")}>
+          <User className="w-6 h-6" />
+          <span className="text-[10px] font-bold uppercase tracking-tighter">Body</span>
         </button>
         <button onClick={() => setActiveTab('progress')} className={cn("flex flex-col items-center gap-1", activeTab === 'progress' ? "text-emerald-600" : "text-slate-400")}>
           <LineChart className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-tighter">Stats</span>
-        </button>
-        <button onClick={() => setActiveTab('coach')} className={cn("flex flex-col items-center gap-1", activeTab === 'coach' ? "text-emerald-600" : "text-slate-400")}>
-          <Sparkles className="w-6 h-6" />
-          <span className="text-[10px] font-bold uppercase tracking-tighter">Coach</span>
         </button>
       </nav>
 
@@ -987,7 +810,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Current Weight ({weightUnit})</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase">Last Recorded Weight ({weightUnit})</label>
                   <input 
                     id="weight-input"
                     type="number" 
@@ -1017,6 +840,85 @@ export default function App() {
                 Save Weight
               </Button>
               <Button variant="ghost" className="w-full" onClick={() => setShowAddWeight(false)}>Cancel</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {editingWeight && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-4">
+          <Card className="w-full max-w-sm animate-in slide-in-from-bottom duration-300">
+            <h2 className="text-xl font-bold mb-4">Edit Weight</h2>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase">Weight ({weightUnit})</label>
+                <input 
+                  type="number" 
+                  step="0.1"
+                  className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none text-2xl font-bold text-center"
+                  defaultValue={weightUnit === 'kg' ? (editingWeight.weight / 2.20462).toFixed(1) : (weightUnit === 'st' ? (editingWeight.weight / 14).toFixed(1) : editingWeight.weight.toFixed(1))}
+                  autoFocus
+                  id="edit-weight-input"
+                />
+              </div>
+              <Button 
+                className="w-full py-4"
+                onClick={() => {
+                  const val = parseFloat((document.getElementById('edit-weight-input') as HTMLInputElement).value);
+                  if (!isNaN(val)) {
+                    let lbs = val;
+                    if (weightUnit === 'kg') lbs = val * 2.20462;
+                    if (weightUnit === 'st') lbs = val * 14;
+                    updateWeight(editingWeight.id, lbs);
+                    setEditingWeight(null);
+                  }
+                }}
+              >
+                Update Weight
+              </Button>
+              <Button variant="ghost" className="w-full" onClick={() => setEditingWeight(null)}>Cancel</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {editingMeasurement && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-4 overflow-y-auto">
+          <Card className="w-full max-w-sm animate-in slide-in-from-bottom duration-300 my-auto">
+            <h2 className="text-xl font-bold mb-4">Edit Measurements</h2>
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+              {measurementParts.map(part => (
+                <div key={part.id} className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">{part.label} ({measurementUnit === 'in' ? 'Inches' : 'CM'})</label>
+                  <input 
+                    id={`edit-m-${part.id}`}
+                    type="number" 
+                    step="0.1"
+                    className="w-full p-3 bg-slate-50 rounded-xl border-none outline-none font-bold"
+                    defaultValue={(() => {
+                      const rawVal = editingMeasurement[part.id as keyof BodyMeasurementEntry] as number;
+                      return rawVal !== undefined ? (measurementUnit === 'cm' ? (rawVal * 2.54).toFixed(1) : rawVal) : '';
+                    })()}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2 mt-6">
+              <Button 
+                className="w-full py-4"
+                onClick={() => {
+                  const updates: any = {};
+                  measurementParts.forEach(part => {
+                    const val = parseFloat((document.getElementById(`edit-m-${part.id}`) as HTMLInputElement).value);
+                    if (!isNaN(val)) updates[part.id] = val;
+                  });
+                  updateMeasurement(editingMeasurement.id, updates);
+                  setEditingMeasurement(null);
+                }}
+              >
+                Update All
+              </Button>
+              <Button variant="ghost" className="w-full" onClick={() => setEditingMeasurement(null)}>Cancel</Button>
             </div>
           </Card>
         </div>
@@ -1097,6 +999,76 @@ export default function App() {
                 Save Height
               </Button>
               <Button variant="ghost" className="w-full" onClick={() => setShowAddHeight(false)}>Cancel</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {showSettings && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-end sm:items-center justify-center p-4">
+          <Card className="w-full max-w-sm animate-in slide-in-from-bottom duration-300">
+            <h2 className="text-xl font-bold mb-6">Settings</h2>
+            
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Weight Units</label>
+                <div className="flex p-1 bg-slate-100 rounded-xl">
+                  {(['lbs', 'kg', 'st'] as const).map((unit) => (
+                    <button
+                      key={unit}
+                      onClick={() => setWeightUnit(unit)}
+                      className={cn(
+                        "flex-1 py-2 rounded-lg text-xs font-bold transition-all",
+                        weightUnit === unit ? "bg-white shadow-sm text-emerald-600" : "text-slate-500"
+                      )}
+                    >
+                      {unit.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Height Units</label>
+                <div className="flex p-1 bg-slate-100 rounded-xl">
+                  {(['cm', 'ft'] as const).map((unit) => (
+                    <button
+                      key={unit}
+                      onClick={() => setHeightUnit(unit)}
+                      className={cn(
+                        "flex-1 py-2 rounded-lg text-xs font-bold transition-all",
+                        heightUnit === unit ? "bg-white shadow-sm text-emerald-600" : "text-slate-500"
+                      )}
+                    >
+                      {unit === 'cm' ? 'CM' : 'FT/IN'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Body Measurement Units</label>
+                <div className="flex p-1 bg-slate-100 rounded-xl">
+                  {(['in', 'cm'] as const).map((unit) => (
+                    <button
+                      key={unit}
+                      onClick={() => setMeasurementUnit(unit)}
+                      className={cn(
+                        "flex-1 py-2 rounded-lg text-xs font-bold transition-all",
+                        measurementUnit === unit ? "bg-white shadow-sm text-emerald-600" : "text-slate-500"
+                      )}
+                    >
+                      {unit === 'in' ? 'Inches' : 'CM'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-4">
+                <Button className="w-full py-4" onClick={() => setShowSettings(false)}>
+                  Done
+                </Button>
+              </div>
             </div>
           </Card>
         </div>

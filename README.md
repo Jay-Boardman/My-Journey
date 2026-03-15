@@ -5,17 +5,14 @@ A personal weight loss and wellness companion designed specifically for users on
 ## Features
 
 - **Injection Tracking:** Log your weekly shots, dose, and injection site. Includes a countdown to your next dose.
-- **AI Meal Estimator:** Type what you ate and get instant AI-powered estimates for calories and protein.
 - **Weight & BMI Progress:** Track your weight in Lbs, Kg, or Stone. Automatic BMI calculation and progress visualization.
 - **Wellness Logging:** Track your mood, side effects, and daily hydration.
-- **AI Health Coach:** Get personalized tips and motivation based on your recent logs.
 
 ## Tech Stack
 
 - **Frontend:** React + TypeScript + Tailwind CSS
 - **Icons:** Lucide React
 - **Charts:** Recharts
-- **AI:** Google Gemini API (via `@google/genai`)
 - **Animations:** Motion (Framer Motion)
 - **Date Handling:** date-fns
 
@@ -30,12 +27,6 @@ A personal weight loss and wellness companion designed specifically for users on
 2. **Install dependencies:**
    ```bash
    npm install
-   ```
-
-3. **Set up Environment Variables:**
-   Create a `.env` file in the root directory and add your Gemini API key:
-   ```env
-   GEMINI_API_KEY=your_api_key_here
    ```
 
 4. **Run the development server:**

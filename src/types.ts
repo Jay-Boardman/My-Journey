@@ -1,5 +1,3 @@
-export type Mood = 'Great' | 'Good' | 'Okay' | 'Poor' | 'Bad';
-
 export interface Shot {
   id: string;
   date: string;
@@ -7,27 +5,21 @@ export interface Shot {
   site: string; // e.g., 'Left Thigh', 'Right Abdomen'
 }
 
-export interface FoodEntry {
-  id: string;
-  timestamp: string;
-  name: string;
-  calories?: number;
-  protein?: number;
-  notes?: string;
-}
-
-export interface FeelingEntry {
-  id: string;
-  timestamp: string;
-  mood: Mood;
-  sideEffects: string[];
-  notes?: string;
-}
-
 export interface WeightEntry {
   id: string;
   date: string;
   weight: number;
+}
+
+export interface BodyMeasurementEntry {
+  id: string;
+  date: string;
+  neck?: number;
+  chest?: number;
+  waist?: number;
+  hips?: number;
+  thighs?: number;
+  arms?: number;
 }
 
 export const INJECTION_SITES = [
@@ -37,15 +29,4 @@ export const INJECTION_SITES = [
   'Right Thigh',
   'Left Back of Arm',
   'Right Back of Arm'
-];
-
-export const COMMON_SIDE_EFFECTS = [
-  'Nausea',
-  'Fatigue',
-  'Headache',
-  'Constipation',
-  'Diarrhea',
-  'Heartburn',
-  'Decreased Appetite',
-  'Injection Site Reaction'
 ];
