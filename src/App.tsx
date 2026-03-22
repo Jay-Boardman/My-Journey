@@ -282,8 +282,8 @@ export default function App() {
     };
 
     return (
-      <div className="space-y-6 pb-20 relative min-h-[600px]">
-        <header className="flex justify-between items-center px-1">
+      <div className="h-full flex flex-col relative">
+        <header className="flex justify-between items-center px-1 shrink-0">
           <div>
             {isEditingLayout ? (
               <div className="animate-in fade-in slide-in-from-left-4 duration-300">
@@ -332,7 +332,10 @@ export default function App() {
 
         <div 
           ref={containerRef}
-          className="relative h-[500px] w-full mt-4 overflow-hidden rounded-3xl bg-slate-50/50 border border-dashed border-slate-200"
+          className={cn(
+            "relative flex-1 w-full mt-4 mb-4 overflow-hidden rounded-3xl transition-all duration-300",
+            isEditingLayout ? "bg-slate-50/50 border-2 border-dashed border-emerald-300 shadow-inner" : "bg-transparent border-none"
+          )}
           onClick={() => isEditingLayout && setSelectedCircle(null)}
         >
           {/* Current Weight Circle */}
@@ -342,22 +345,16 @@ export default function App() {
             dragConstraints={containerRef}
             dragElastic={0}
             onPointerDown={() => isEditingLayout && setSelectedCircle('currentWeight')}
-            onDragEnd={(_, info) => {
+            onDragEnd={(e) => {
               if (containerRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
-                const circleSize = layout.circles.currentWeight.size;
-                // Calculate position relative to container
-                let x = ((info.point.x - rect.left - circleSize / 2) / rect.width) * 100;
-                let y = ((info.point.y - rect.top - circleSize / 2) / rect.height) * 100;
+                const element = e.target as HTMLElement;
+                const circleRect = element.getBoundingClientRect();
                 
-                // Constrain percentages
-                const xLimit = (1 - circleSize / rect.width) * 100;
-                const yLimit = (1 - circleSize / rect.height) * 100;
+                const x = ((circleRect.left - rect.left) / rect.width) * 100;
+                const y = ((circleRect.top - rect.top) / rect.height) * 100;
                 
-                updateLayout('currentWeight', { 
-                  x: Math.max(0, Math.min(xLimit, x)), 
-                  y: Math.max(0, Math.min(yLimit, y)) 
-                });
+                updateLayout('currentWeight', { x, y });
               }
             }}
             style={{ 
@@ -423,18 +420,16 @@ export default function App() {
               dragConstraints={containerRef}
               dragElastic={0}
               onPointerDown={() => isEditingLayout && setSelectedCircle('totalLost')}
-              onDragEnd={(_, info) => {
+              onDragEnd={(e) => {
                 if (containerRef.current) {
                   const rect = containerRef.current.getBoundingClientRect();
-                  const circleSize = layout.circles.totalLost.size;
-                  let x = ((info.point.x - rect.left - circleSize / 2) / rect.width) * 100;
-                  let y = ((info.point.y - rect.top - circleSize / 2) / rect.height) * 100;
-                  const xLimit = (1 - circleSize / rect.width) * 100;
-                  const yLimit = (1 - circleSize / rect.height) * 100;
-                  updateLayout('totalLost', { 
-                    x: Math.max(0, Math.min(xLimit, x)), 
-                    y: Math.max(0, Math.min(yLimit, y)) 
-                  });
+                  const element = e.target as HTMLElement;
+                  const circleRect = element.getBoundingClientRect();
+                  
+                  const x = ((circleRect.left - rect.left) / rect.width) * 100;
+                  const y = ((circleRect.top - rect.top) / rect.height) * 100;
+                  
+                  updateLayout('totalLost', { x, y });
                 }
               }}
               style={{ 
@@ -493,18 +488,16 @@ export default function App() {
             dragConstraints={containerRef}
             dragElastic={0}
             onPointerDown={() => isEditingLayout && setSelectedCircle('nextShot')}
-            onDragEnd={(_, info) => {
+            onDragEnd={(e) => {
               if (containerRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
-                const circleSize = layout.circles.nextShot.size;
-                let x = ((info.point.x - rect.left - circleSize / 2) / rect.width) * 100;
-                let y = ((info.point.y - rect.top - circleSize / 2) / rect.height) * 100;
-                const xLimit = (1 - circleSize / rect.width) * 100;
-                const yLimit = (1 - circleSize / rect.height) * 100;
-                updateLayout('nextShot', { 
-                  x: Math.max(0, Math.min(xLimit, x)), 
-                  y: Math.max(0, Math.min(yLimit, y)) 
-                });
+                const element = e.target as HTMLElement;
+                const circleRect = element.getBoundingClientRect();
+                
+                const x = ((circleRect.left - rect.left) / rect.width) * 100;
+                const y = ((circleRect.top - rect.top) / rect.height) * 100;
+                
+                updateLayout('nextShot', { x, y });
               }
             }}
             style={{ 
@@ -558,18 +551,16 @@ export default function App() {
             dragConstraints={containerRef}
             dragElastic={0}
             onPointerDown={() => isEditingLayout && setSelectedCircle('updateWeight')}
-            onDragEnd={(_, info) => {
+            onDragEnd={(e) => {
               if (containerRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
-                const circleSize = layout.circles.updateWeight.size;
-                let x = ((info.point.x - rect.left - circleSize / 2) / rect.width) * 100;
-                let y = ((info.point.y - rect.top - circleSize / 2) / rect.height) * 100;
-                const xLimit = (1 - circleSize / rect.width) * 100;
-                const yLimit = (1 - circleSize / rect.height) * 100;
-                updateLayout('updateWeight', { 
-                  x: Math.max(0, Math.min(xLimit, x)), 
-                  y: Math.max(0, Math.min(yLimit, y)) 
-                });
+                const element = e.target as HTMLElement;
+                const circleRect = element.getBoundingClientRect();
+                
+                const x = ((circleRect.left - rect.left) / rect.width) * 100;
+                const y = ((circleRect.top - rect.top) / rect.height) * 100;
+                
+                updateLayout('updateWeight', { x, y });
               }
             }}
             style={{ 
@@ -626,18 +617,16 @@ export default function App() {
             dragConstraints={containerRef}
             dragElastic={0}
             onPointerDown={() => isEditingLayout && setSelectedCircle('bmi')}
-            onDragEnd={(_, info) => {
+            onDragEnd={(e) => {
               if (containerRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
-                const circleSize = layout.circles.bmi.size;
-                let x = ((info.point.x - rect.left - circleSize / 2) / rect.width) * 100;
-                let y = ((info.point.y - rect.top - circleSize / 2) / rect.height) * 100;
-                const xLimit = (1 - circleSize / rect.width) * 100;
-                const yLimit = (1 - circleSize / rect.height) * 100;
-                updateLayout('bmi', { 
-                  x: Math.max(0, Math.min(xLimit, x)), 
-                  y: Math.max(0, Math.min(yLimit, y)) 
-                });
+                const element = e.target as HTMLElement;
+                const circleRect = element.getBoundingClientRect();
+                
+                const x = ((circleRect.left - rect.left) / rect.width) * 100;
+                const y = ((circleRect.top - rect.top) / rect.height) * 100;
+                
+                updateLayout('bmi', { x, y });
               }
             }}
             style={{ 
@@ -689,7 +678,7 @@ export default function App() {
   };
 
   const ShotsView = () => (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-bold text-slate-900">Shot Tracker</h1>
         <p className="text-slate-500 text-sm">Manage your injection schedule</p>
@@ -778,7 +767,7 @@ export default function App() {
     };
 
     return (
-      <div className="space-y-6 pb-24">
+      <div className="space-y-6">
         <header>
           <h1 className="text-2xl font-bold text-slate-900">Body Measurements</h1>
           <p className="text-slate-500 text-sm">Enter your measurements in {measurementUnit === 'in' ? 'inches' : 'centimeters'}</p>
@@ -877,7 +866,7 @@ export default function App() {
     }, [weight, weightUnit]);
 
     return (
-      <div className="space-y-6 pb-24">
+      <div className="space-y-6">
         <header>
           <h1 className="text-2xl font-bold text-slate-900">Progress</h1>
           <p className="text-slate-500 text-sm">Visualize your transformation in {weightUnit.toUpperCase()}</p>
@@ -1076,16 +1065,18 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      <div className="max-w-md mx-auto px-4 pt-6">
+    <div className="h-[100dvh] bg-slate-50 font-sans text-slate-900 flex flex-col overflow-hidden">
+      <div className="flex-1 max-w-md mx-auto w-full px-4 pt-6 flex flex-col min-h-0">
         {activeTab === 'dashboard' && <DashboardView />}
-        {activeTab === 'shots' && <ShotsView />}
-        {activeTab === 'body' && <BodyView />}
-        {activeTab === 'progress' && <ProgressView />}
+        <div className="flex-1 overflow-y-auto">
+          {activeTab === 'shots' && <ShotsView />}
+          {activeTab === 'body' && <BodyView />}
+          {activeTab === 'progress' && <ProgressView />}
+        </div>
       </div>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 flex justify-between items-center z-50">
+      <nav className="bg-white border-t border-slate-200 px-6 py-3 pb-10 flex justify-between items-center z-50">
         <button onClick={() => setActiveTab('dashboard')} className={cn("flex flex-col items-center gap-1", activeTab === 'dashboard' ? "text-emerald-600" : "text-slate-400")}>
           <LayoutDashboard className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase tracking-tighter">Home</span>
