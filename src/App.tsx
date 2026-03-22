@@ -679,9 +679,17 @@ export default function App() {
 
   const ShotsView = () => (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-slate-900">Shot Tracker</h1>
-        <p className="text-slate-500 text-sm">Manage your injection schedule</p>
+      <header className="flex justify-between items-start">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Shot Tracker</h1>
+          <p className="text-slate-500 text-sm">Manage your injection schedule</p>
+        </div>
+        <Button 
+          onClick={() => setShowAddShot(true)}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-200 rounded-2xl p-3 h-auto"
+        >
+          <Plus className="w-5 h-5" />
+        </Button>
       </header>
 
       <Card className="bg-emerald-50 border-emerald-100">
