@@ -66,6 +66,43 @@ const save = <T,>(key: string, value: T) => {
 
 // --- Components ---
 
+const SwipeToDelete = ({ 
+  children, 
+  onDelete, 
+  id 
+}: { 
+  children: React.ReactNode; 
+  onDelete: () => void;
+  id: string;
+}) => {
+  return (
+    <div className="relative overflow-hidden rounded-xl mb-3">
+      {/* Delete Background */}
+      <div className="absolute inset-0 bg-red-500 flex items-center justify-end px-6">
+        <div className="flex flex-col items-center text-white">
+          <Trash2 className="w-5 h-5" />
+          <span className="text-[8px] font-bold uppercase mt-1">Delete</span>
+        </div>
+      </div>
+      
+      {/* Content Layer */}
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: -100, right: 0 }}
+        dragElastic={0.1}
+        onDragEnd={(_, info) => {
+          if (info.offset.x < -70) {
+            onDelete();
+          }
+        }}
+        className="relative bg-white z-10"
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
+};
+
 const Card = ({ children, className, id }: { children: React.ReactNode; className?: string; id?: string }) => (
   <div id={id} className={cn("bg-white rounded-2xl p-4 shadow-sm border border-slate-100", className)}>
     {children}
@@ -992,80 +1029,100 @@ export default function App() {
               <p className="text-xs">No measurements logged yet.</p>
             </Card>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-0">
               {[...measurements].reverse().map(m => (
-                <Card key={m.id} className="p-3 group">
-                  <div className="flex justify-between items-center mb-2">
-                    <p className="text-xs font-bold text-slate-900">{format(parseISO(m.date), 'MMM do, yyyy')}</p>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={() => setEditingMeasurement(m)}
-                        className="p-1 text-slate-400 hover:text-blue-500"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => {
-                          if (confirm('Delete this measurement entry?')) {
-                            deleteMeasurement(m.id);
-                          }
-                        }}
-                        className="p-1 text-slate-400 hover:text-red-500"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                <SwipeToDelete 
+                  key={m.id} 
+                  id={m.id} 
+                  onDelete={() => {
+                    if (confirm('Delete this measurement entry?')) {
+                      deleteMeasurement(m.id);
+                    }
+                  }}
+                >
+                  <Card className="p-3 group border-none shadow-none rounded-none border-b border-slate-50">
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="text-xs font-bold text-slate-900">{format(parseISO(m.date), 'MMM do, yyyy')}</p>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => setEditingMeasurement(m)}
+                          className="p-1 text-slate-400 hover:text-blue-500"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => {
+                            if (confirm('Delete this measurement entry?')) {
+                              deleteMeasurement(m.id);
+                            }
+                          }}
+                          className="p-1 text-slate-400 hover:text-red-500"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {Object.entries(m).map(([key, rawVal]) => {
-                      if (key === 'id' || key === 'date' || rawVal === undefined) return null;
-                      const val = measurementUnit === 'cm' ? parseFloat(((rawVal as number) * 2.54).toFixed(1)) : rawVal as number;
-                      return (
-                        <div key={key} className="bg-slate-50 p-2 rounded-lg text-center">
-                          <p className="text-[8px] font-bold text-slate-400 uppercase">{key}</p>
-                          <p className="text-xs font-bold text-slate-900">{val}{measurementUnit === 'in' ? '"' : 'cm'}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </Card>
+                    <div className="grid grid-cols-3 gap-2">
+                      {Object.entries(m).map(([key, rawVal]) => {
+                        if (key === 'id' || key === 'date' || rawVal === undefined) return null;
+                        const val = measurementUnit === 'cm' ? parseFloat(((rawVal as number) * 2.54).toFixed(1)) : rawVal as number;
+                        return (
+                          <div key={key} className="bg-slate-50 p-2 rounded-lg text-center">
+                            <p className="text-[8px] font-bold text-slate-400 uppercase">{key}</p>
+                            <p className="text-xs font-bold text-slate-900">{val}{measurementUnit === 'in' ? '"' : 'cm'}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                </SwipeToDelete>
               ))}
             </div>
           )}
         </div>
 
-        <div className="space-y-3">
-          <h3 className="font-bold text-slate-900 text-sm">Weight Log</h3>
+        <div className="space-y-0">
+          <h3 className="font-bold text-slate-900 text-sm mb-3">Weight Log</h3>
           {[...weight].reverse().map(w => (
-            <div key={w.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-100 shadow-sm group">
-              <div className="flex flex-col">
-                <p className="text-sm font-medium text-slate-900">{format(parseISO(w.date), 'MMM do, yyyy')}</p>
-                <p className="text-xs text-slate-400">{format(parseISO(w.date), 'HH:mm')}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <p className="text-sm font-bold text-emerald-600">{formatWeight(w.weight)}</p>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button 
-                    onClick={() => {
-                      setEditingWeight(w);
-                    }}
-                    className="p-1 text-slate-400 hover:text-blue-500"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button 
-                    onClick={() => {
-                      if (confirm('Delete this weight entry?')) {
-                        deleteWeight(w.id);
-                      }
-                    }}
-                    className="p-1 text-slate-400 hover:text-red-500"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+            <SwipeToDelete
+              key={w.id}
+              id={w.id}
+              onDelete={() => {
+                if (confirm('Delete this weight entry?')) {
+                  deleteWeight(w.id);
+                }
+              }}
+            >
+              <div className="flex justify-between items-center p-3 bg-white border-b border-slate-50 group">
+                <div className="flex flex-col">
+                  <p className="text-sm font-medium text-slate-900">{format(parseISO(w.date), 'MMM do, yyyy')}</p>
+                  <p className="text-xs text-slate-400">{format(parseISO(w.date), 'HH:mm')}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <p className="text-sm font-bold text-emerald-600">{formatWeight(w.weight)}</p>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => {
+                        setEditingWeight(w);
+                      }}
+                      className="p-1 text-slate-400 hover:text-blue-500"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (confirm('Delete this weight entry?')) {
+                          deleteWeight(w.id);
+                        }
+                      }}
+                      className="p-1 text-slate-400 hover:text-red-500"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            </SwipeToDelete>
           ))}
         </div>
       </div>
