@@ -180,8 +180,6 @@ export default function App() {
   };
 
   const addMeasurement = (data: Partial<Omit<BodyMeasurementEntry, 'id' | 'date'>>) => {
-    const lastEntry = measurements.length > 0 ? measurements[measurements.length - 1] : {};
-    
     // Convert to inches if currently in cm mode
     const processedData = { ...data };
     if (measurementUnit === 'cm') {
@@ -193,13 +191,26 @@ export default function App() {
       });
     }
 
-    const newEntry: BodyMeasurementEntry = {
-      ...lastEntry,
-      id: crypto.randomUUID(),
-      date: new Date().toISOString(),
-      ...processedData
-    };
-    setMeasurements([...measurements, newEntry]);
+    const today = new Date();
+    const existingEntryIndex = measurements.findIndex(m => isToday(parseISO(m.date)));
+
+    if (existingEntryIndex !== -1) {
+      // Update existing entry for today
+      const updatedMeasurements = [...measurements];
+      updatedMeasurements[existingEntryIndex] = {
+        ...updatedMeasurements[existingEntryIndex],
+        ...processedData
+      };
+      setMeasurements(updatedMeasurements);
+    } else {
+      // Create new entry
+      const newEntry: BodyMeasurementEntry = {
+        id: crypto.randomUUID(),
+        date: today.toISOString(),
+        ...processedData
+      };
+      setMeasurements([...measurements, newEntry]);
+    }
   };
 
   const deleteMeasurement = (id: string) => {
@@ -232,8 +243,8 @@ export default function App() {
   ];
 
   const DashboardView = () => (
-    <div className="space-y-4 pb-20">
-      <header className="flex justify-between items-center">
+    <div className="space-y-8 pb-20">
+      <header className="flex justify-between items-center px-1">
         <div>
           <h1 className="text-xl font-bold text-slate-900">My Journey</h1>
           <p className="text-slate-500 text-xs">{format(new Date(), 'EEEE, MMMM do')}</p>
@@ -246,10 +257,10 @@ export default function App() {
         </button>
       </header>
 
-      {/* Weight Info Circles */}
-      <div className="flex justify-center items-center gap-4 py-2">
+      {/* Main Weight Display */}
+      <div className="flex justify-center items-center gap-6 py-2">
         <div className="flex flex-col items-center">
-          <div className="w-40 h-40 rounded-full bg-white border-4 border-emerald-500 shadow-xl flex flex-col items-center justify-center p-4 text-center">
+          <div className="w-44 h-44 rounded-full bg-white border-4 border-emerald-500 shadow-xl flex flex-col items-center justify-center p-4 text-center">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current</p>
             <div className="flex items-baseline gap-0.5">
               <p className="text-4xl font-black text-slate-900 leading-none">
@@ -271,9 +282,9 @@ export default function App() {
 
         {totalLostDisplay && (
           <div className="flex flex-col items-center">
-            <div className="w-28 h-28 rounded-full bg-emerald-600 shadow-lg flex flex-col items-center justify-center p-3 text-center text-white">
+            <div className="w-24 h-24 rounded-full bg-emerald-600 shadow-lg flex flex-col items-center justify-center p-3 text-center text-white">
               <p className="text-[8px] font-bold text-emerald-100 uppercase tracking-widest mb-0.5">Total Lost</p>
-              <p className="text-xl font-black leading-none">
+              <p className="text-lg font-black leading-none">
                 {totalLost ? (
                   weightUnit === 'kg' ? (parseFloat(totalLost) / 2.20462).toFixed(1) : 
                   weightUnit === 'st' ? (parseFloat(totalLost) / 14).toFixed(1) : 
@@ -286,56 +297,42 @@ export default function App() {
         )}
       </div>
 
-      <div className="px-4 space-y-2">
-        <Button 
-          className="w-full py-4 rounded-2xl shadow-md bg-emerald-600 hover:bg-emerald-700 text-base font-bold flex items-center justify-center gap-2"
-          onClick={() => setShowAddWeight(true)}
-        >
-          <Scale className="w-5 h-5" /> Update Weight
-        </Button>
-        
-        {currentBMI && (
-          <div className="flex justify-center">
-            <div className="bg-white px-3 py-1 rounded-full border border-slate-100 shadow-sm flex items-center gap-2">
-              <User className="w-3 h-3 text-slate-400" />
-              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">
-                Current BMI: <span className="text-emerald-600">{currentBMI}</span>
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Shot Countdown */}
-      <Card className="bg-white border-slate-100 shadow-sm overflow-hidden">
-        <div className="flex justify-between items-center p-3">
-          <div className="flex items-center gap-3">
-            <div className="bg-emerald-50 p-2 rounded-xl">
-              <Syringe className="w-5 h-5 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-slate-500 text-[9px] font-bold uppercase tracking-wider">Next Shot</p>
-              <h2 className="text-lg font-bold text-slate-900">
-                {daysUntilNextShot !== null ? (daysUntilNextShot <= 0 ? 'Today!' : `${daysUntilNextShot} Days`) : 'Set first shot'}
-              </h2>
-            </div>
-          </div>
-          <Button 
-            variant="ghost" 
-            className="text-emerald-600 font-bold text-[10px] h-8"
-            onClick={() => setShowAddShot(true)}
-          >
-            Log <Plus className="w-3 h-3 ml-0.5" />
-          </Button>
-        </div>
-        {nextShotDate && (
-          <div className="bg-slate-50 px-3 py-1.5 border-t border-slate-100">
-            <p className="text-[9px] text-slate-400 font-medium">
-              Due {format(nextShotDate, 'EEEE, MMM do')}
+      {/* Action & Info Circles Grid */}
+      <div className="grid grid-cols-3 gap-3 px-2">
+        {/* Next Shot Circle */}
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-24 h-24 rounded-full bg-white border border-slate-100 shadow-sm flex flex-col items-center justify-center p-2 text-center">
+            <Syringe className="w-4 h-4 text-emerald-600 mb-1" />
+            <p className="text-xs font-black text-slate-900 leading-tight">
+              {nextShotDate ? format(nextShotDate, 'MMM d') : '--'}
             </p>
+            <p className="text-[8px] text-slate-400 uppercase font-bold tracking-tighter">Next Shot</p>
           </div>
-        )}
-      </Card>
+        </div>
+
+        {/* Update Weight Circle */}
+        <button 
+          onClick={() => setShowAddWeight(true)}
+          className="flex flex-col items-center gap-2 group"
+        >
+          <div className="w-24 h-24 rounded-full bg-emerald-600 shadow-lg flex flex-col items-center justify-center p-2 text-center text-white group-hover:bg-emerald-700 transition-all active:scale-95">
+            <Scale className="w-5 h-5 mb-1" />
+            <p className="text-[10px] font-bold uppercase tracking-wider">Update</p>
+            <p className="text-[8px] text-emerald-100 uppercase font-bold">Weight</p>
+          </div>
+        </button>
+
+        {/* BMI Circle */}
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-24 h-24 rounded-full bg-white border border-slate-100 shadow-sm flex flex-col items-center justify-center p-2 text-center">
+            <User className="w-4 h-4 text-slate-400 mb-1" />
+            <p className="text-xs font-black text-slate-900 leading-tight">
+              {currentBMI || '--'}
+            </p>
+            <p className="text-[8px] text-slate-400 uppercase font-bold tracking-tighter">Current BMI</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 
@@ -401,13 +398,15 @@ export default function App() {
     const [selectedPart, setSelectedPart] = useState<keyof Omit<BodyMeasurementEntry, 'id' | 'date'> | null>(null);
     const [inputValue, setInputValue] = useState('');
 
-    const lastMeasurements = measurements.length > 0 ? measurements[measurements.length - 1] : null;
-
-    const handleSave = () => {
-      if (selectedPart && inputValue) {
-        addMeasurement({ [selectedPart]: parseFloat(inputValue) });
-        // We keep it open so the user can see the button change to "Update"
+    const getLatestValue = (partId: string) => {
+      // Search backwards through measurements to find the most recent value for this part
+      for (let i = measurements.length - 1; i >= 0; i--) {
+        const val = measurements[i][partId as keyof BodyMeasurementEntry];
+        if (val !== undefined && typeof val === 'number') {
+          return val;
+        }
       }
+      return undefined;
     };
 
     const parts = [
@@ -419,6 +418,13 @@ export default function App() {
       { id: 'thighs', label: 'Thighs', x: 38, y: 72 },
     ];
 
+    const handleSave = () => {
+      if (selectedPart && inputValue) {
+        addMeasurement({ [selectedPart]: parseFloat(inputValue) });
+        // We keep it open so the user can see the button change to "Update"
+      }
+    };
+
     return (
       <div className="space-y-6 pb-24">
         <header>
@@ -428,7 +434,7 @@ export default function App() {
 
         <div className="grid grid-cols-2 gap-4">
           {parts.map(part => {
-            const rawVal = lastMeasurements?.[part.id as keyof BodyMeasurementEntry] as number | undefined;
+            const rawVal = getLatestValue(part.id);
             const val = rawVal !== undefined ? (measurementUnit === 'cm' ? parseFloat((rawVal * 2.54).toFixed(1)) : rawVal) : undefined;
             const isSelected = selectedPart === part.id;
 
