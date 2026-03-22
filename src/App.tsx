@@ -11,8 +11,14 @@ import {
   User,
   Trash2,
   Edit2,
-  Settings
+  Settings,
+  Move,
+  Maximize2,
+  RotateCcw,
+  Check,
+  X
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   LineChart as ReChart, 
   Line, 
@@ -20,7 +26,8 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ResponsiveContainer 
+  ResponsiveContainer,
+  LabelList
 } from 'recharts';
 import { format, addDays, differenceInDays, parseISO, isToday } from 'date-fns';
 import { cn } from './lib/utils';
@@ -28,6 +35,9 @@ import {
   Shot, 
   WeightEntry, 
   BodyMeasurementEntry,
+  DashboardLayout,
+  CircleLayout,
+  DEFAULT_LAYOUT,
   INJECTION_SITES 
 } from './types';
 
@@ -41,7 +51,8 @@ const STORAGE_KEYS = {
   HEIGHT: 'mj_height',
   HEIGHT_UNIT: 'mj_height_unit',
   MEASUREMENT_UNIT: 'mj_measurement_unit',
-  MEASUREMENTS: 'mj_measurements'
+  MEASUREMENTS: 'mj_measurements',
+  LAYOUT: 'mj_layout'
 };
 
 const load = <T,>(key: string, defaultValue: T): T => {
@@ -102,8 +113,10 @@ export default function App() {
   const [height, setHeight] = useState<number | null>(() => load(STORAGE_KEYS.HEIGHT, null)); // stored in cm
   const [heightUnit, setHeightUnit] = useState<'cm' | 'ft'>(() => load(STORAGE_KEYS.HEIGHT_UNIT, 'cm'));
   const [measurementUnit, setMeasurementUnit] = useState<'in' | 'cm'>(() => load(STORAGE_KEYS.MEASUREMENT_UNIT, 'in'));
+  const [layout, setLayout] = useState<DashboardLayout>(() => load(STORAGE_KEYS.LAYOUT, DEFAULT_LAYOUT));
   
   // UI State
+  const [isEditingLayout, setIsEditingLayout] = useState(false);
   const [showAddShot, setShowAddShot] = useState(false);
   const [showAddWeight, setShowAddWeight] = useState(false);
   const [editingWeight, setEditingWeight] = useState<WeightEntry | null>(null);
@@ -119,6 +132,7 @@ export default function App() {
   useEffect(() => save(STORAGE_KEYS.HEIGHT_UNIT, heightUnit), [heightUnit]);
   useEffect(() => save(STORAGE_KEYS.MEASUREMENT_UNIT, measurementUnit), [measurementUnit]);
   useEffect(() => save(STORAGE_KEYS.MEASUREMENTS, measurements), [measurements]);
+  useEffect(() => save(STORAGE_KEYS.LAYOUT, layout), [layout]);
 
   // Derived Values
   const lastShot = shots.length > 0 ? shots[shots.length - 1] : null;
@@ -242,25 +256,130 @@ export default function App() {
     { id: 'thighs', label: 'Thighs' },
   ];
 
-  const DashboardView = () => (
-    <div className="space-y-8 pb-20">
-      <header className="flex justify-between items-center px-1">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">My Journey</h1>
-          <p className="text-slate-500 text-xs">{format(new Date(), 'EEEE, MMMM do')}</p>
-        </div>
-        <button 
-          onClick={() => setShowSettings(true)}
-          className="p-2 bg-white rounded-xl shadow-sm border border-slate-100 text-slate-400 hover:text-emerald-600 transition-colors"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
-      </header>
+  const DashboardView = () => {
+    const containerRef = React.useRef<HTMLDivElement>(null);
+    const [selectedCircle, setSelectedCircle] = React.useState<string | null>(null);
 
-      {/* Main Weight Display */}
-      <div className="flex justify-center items-center gap-6 py-2">
-        <div className="flex flex-col items-center">
-          <div className="w-44 h-44 rounded-full bg-white border-4 border-emerald-500 shadow-xl flex flex-col items-center justify-center p-4 text-center">
+    // Clear selection when editing mode is turned off
+    React.useEffect(() => {
+      if (!isEditingLayout) setSelectedCircle(null);
+    }, [isEditingLayout]);
+
+    const updateLayout = (id: string, updates: Partial<CircleLayout>) => {
+      setLayout(prev => ({
+        ...prev,
+        circles: {
+          ...prev.circles,
+          [id]: { ...prev.circles[id], ...updates }
+        }
+      }));
+    };
+
+    const resetLayout = () => {
+      if (confirm('Are you sure you want to reset the layout to default?')) {
+        setLayout(DEFAULT_LAYOUT);
+      }
+    };
+
+    return (
+      <div className="space-y-6 pb-20 relative min-h-[600px]">
+        <header className="flex justify-between items-center px-1">
+          <div>
+            {isEditingLayout ? (
+              <div className="animate-in fade-in slide-in-from-left-4 duration-300">
+                <h1 className="text-xl font-bold text-emerald-600 flex items-center gap-2">
+                  <Move className="w-5 h-5" />
+                  Edit Layout
+                </h1>
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Drag to move • Slider to resize</p>
+              </div>
+            ) : (
+              <>
+                <h1 className="text-xl font-bold text-slate-900">Body Stat Tracker</h1>
+                <p className="text-slate-500 text-xs">{format(new Date(), 'EEEE, MMMM do')}</p>
+              </>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {isEditingLayout && (
+              <div className="flex gap-2 animate-in fade-in slide-in-from-right-4 duration-300">
+                <Button 
+                  variant="ghost" 
+                  className="text-[10px] font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1 px-2 py-1"
+                  onClick={resetLayout}
+                >
+                  <RotateCcw className="w-3 h-3" /> Reset
+                </Button>
+                <Button 
+                  variant="secondary" 
+                  className="p-2 rounded-xl bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                  onClick={() => setIsEditingLayout(false)}
+                >
+                  <Check className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+            {!isEditingLayout && (
+              <button 
+                onClick={() => setShowSettings(true)}
+                className="p-2 bg-white rounded-xl shadow-sm border border-slate-100 text-slate-400 hover:text-emerald-600 transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </header>
+
+        <div 
+          ref={containerRef}
+          className="relative h-[500px] w-full mt-4 overflow-hidden rounded-3xl bg-slate-50/50 border border-dashed border-slate-200"
+          onClick={() => isEditingLayout && setSelectedCircle(null)}
+        >
+          {/* Current Weight Circle */}
+          <motion.div 
+            drag={isEditingLayout}
+            dragMomentum={false}
+            dragConstraints={containerRef}
+            dragElastic={0}
+            onPointerDown={() => isEditingLayout && setSelectedCircle('currentWeight')}
+            onDragEnd={(_, info) => {
+              if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                const circleSize = layout.circles.currentWeight.size;
+                // Calculate position relative to container
+                let x = ((info.point.x - rect.left - circleSize / 2) / rect.width) * 100;
+                let y = ((info.point.y - rect.top - circleSize / 2) / rect.height) * 100;
+                
+                // Constrain percentages
+                const xLimit = (1 - circleSize / rect.width) * 100;
+                const yLimit = (1 - circleSize / rect.height) * 100;
+                
+                updateLayout('currentWeight', { 
+                  x: Math.max(0, Math.min(xLimit, x)), 
+                  y: Math.max(0, Math.min(yLimit, y)) 
+                });
+              }
+            }}
+            style={{ 
+              position: 'absolute',
+              left: `${layout.circles.currentWeight.x}%`,
+              top: `${layout.circles.currentWeight.y}%`,
+              width: layout.circles.currentWeight.size,
+              height: layout.circles.currentWeight.size,
+              zIndex: 20
+            }}
+            className={cn(
+              "rounded-full bg-white border-4 border-emerald-500 shadow-2xl flex flex-col items-center justify-center p-4 text-center cursor-grab active:cursor-grabbing transition-shadow",
+              isEditingLayout && "ring-4 ring-emerald-200 ring-offset-2",
+              isEditingLayout && selectedCircle === 'currentWeight' && "shadow-emerald-200/50 ring-emerald-400"
+            )}
+            onClick={(e) => {
+              if (isEditingLayout) {
+                e.stopPropagation();
+                setSelectedCircle('currentWeight');
+              }
+            }}
+          >
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Current</p>
             <div className="flex items-baseline gap-0.5">
               <p className="text-4xl font-black text-slate-900 leading-none">
@@ -277,64 +396,297 @@ export default function App() {
               )}
             </div>
             <p className="text-[10px] font-bold text-emerald-600 uppercase mt-1">{weightUnit}</p>
-          </div>
-        </div>
+            {isEditingLayout && selectedCircle === 'currentWeight' && (
+              <div 
+                className="absolute -bottom-14 left-1/2 -translate-x-1/2 w-48 bg-white/95 backdrop-blur rounded-xl p-3 shadow-xl border border-emerald-100 z-50 animate-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Size</span>
+                  <span className="text-[10px] font-bold text-emerald-600">{layout.circles.currentWeight.size}px</span>
+                </div>
+                <input 
+                  type="range" min="100" max="250" 
+                  value={layout.circles.currentWeight.size}
+                  onChange={(e) => updateLayout('currentWeight', { size: parseInt(e.target.value) })}
+                  className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                />
+              </div>
+            )}
+          </motion.div>
 
-        {totalLostDisplay && (
-          <div className="flex flex-col items-center">
-            <div className="w-24 h-24 rounded-full bg-emerald-600 shadow-lg flex flex-col items-center justify-center p-3 text-center text-white">
-              <p className="text-[8px] font-bold text-emerald-100 uppercase tracking-widest mb-0.5">Total Lost</p>
-              <p className="text-lg font-black leading-none">
+          {/* Total Lost Circle */}
+          {totalLostDisplay && (
+            <motion.div 
+              drag={isEditingLayout}
+              dragMomentum={false}
+              dragConstraints={containerRef}
+              dragElastic={0}
+              onPointerDown={() => isEditingLayout && setSelectedCircle('totalLost')}
+              onDragEnd={(_, info) => {
+                if (containerRef.current) {
+                  const rect = containerRef.current.getBoundingClientRect();
+                  const circleSize = layout.circles.totalLost.size;
+                  let x = ((info.point.x - rect.left - circleSize / 2) / rect.width) * 100;
+                  let y = ((info.point.y - rect.top - circleSize / 2) / rect.height) * 100;
+                  const xLimit = (1 - circleSize / rect.width) * 100;
+                  const yLimit = (1 - circleSize / rect.height) * 100;
+                  updateLayout('totalLost', { 
+                    x: Math.max(0, Math.min(xLimit, x)), 
+                    y: Math.max(0, Math.min(yLimit, y)) 
+                  });
+                }
+              }}
+              style={{ 
+                position: 'absolute',
+                left: `${layout.circles.totalLost.x}%`,
+                top: `${layout.circles.totalLost.y}%`,
+                width: layout.circles.totalLost.size,
+                height: layout.circles.totalLost.size,
+                zIndex: 10
+              }}
+              className={cn(
+                "rounded-full bg-emerald-600 shadow-2xl flex flex-col items-center justify-center p-4 text-center text-white cursor-grab active:cursor-grabbing transition-shadow",
+                isEditingLayout && "ring-4 ring-emerald-200 ring-offset-2",
+                isEditingLayout && selectedCircle === 'totalLost' && "shadow-emerald-200/50 ring-emerald-400"
+              )}
+              onClick={(e) => {
+                if (isEditingLayout) {
+                  e.stopPropagation();
+                  setSelectedCircle('totalLost');
+                }
+              }}
+            >
+              <p className="text-[10px] font-bold text-emerald-100 uppercase tracking-widest mb-1">Total Lost</p>
+              <p className="text-2xl font-black leading-none">
                 {totalLost ? (
                   weightUnit === 'kg' ? (parseFloat(totalLost) / 2.20462).toFixed(1) : 
                   weightUnit === 'st' ? (parseFloat(totalLost) / 14).toFixed(1) : 
                   totalLost
                 ) : '--'}
               </p>
-              <p className="text-[8px] font-bold text-emerald-100 uppercase mt-0.5">{weightUnit}</p>
-            </div>
-          </div>
-        )}
-      </div>
+              <p className="text-[10px] font-bold text-emerald-100 uppercase mt-1">{weightUnit}</p>
+              {isEditingLayout && selectedCircle === 'totalLost' && (
+                <div 
+                  className="absolute -bottom-14 left-1/2 -translate-x-1/2 w-48 bg-white/95 backdrop-blur rounded-xl p-3 shadow-xl border border-emerald-100 z-50 animate-in zoom-in-95 duration-200"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Size</span>
+                    <span className="text-[10px] font-bold text-emerald-600">{layout.circles.totalLost.size}px</span>
+                  </div>
+                  <input 
+                    type="range" min="80" max="200" 
+                    value={layout.circles.totalLost.size}
+                    onChange={(e) => updateLayout('totalLost', { size: parseInt(e.target.value) })}
+                    className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                  />
+                </div>
+              )}
+            </motion.div>
+          )}
 
-      {/* Action & Info Circles Grid */}
-      <div className="grid grid-cols-3 gap-3 px-2">
-        {/* Next Shot Circle */}
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-24 h-24 rounded-full bg-white border border-slate-100 shadow-sm flex flex-col items-center justify-center p-2 text-center">
-            <Syringe className="w-4 h-4 text-emerald-600 mb-1" />
-            <p className="text-xs font-black text-slate-900 leading-tight">
+          {/* Next Shot Circle */}
+          <motion.div 
+            drag={isEditingLayout}
+            dragMomentum={false}
+            dragConstraints={containerRef}
+            dragElastic={0}
+            onPointerDown={() => isEditingLayout && setSelectedCircle('nextShot')}
+            onDragEnd={(_, info) => {
+              if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                const circleSize = layout.circles.nextShot.size;
+                let x = ((info.point.x - rect.left - circleSize / 2) / rect.width) * 100;
+                let y = ((info.point.y - rect.top - circleSize / 2) / rect.height) * 100;
+                const xLimit = (1 - circleSize / rect.width) * 100;
+                const yLimit = (1 - circleSize / rect.height) * 100;
+                updateLayout('nextShot', { 
+                  x: Math.max(0, Math.min(xLimit, x)), 
+                  y: Math.max(0, Math.min(yLimit, y)) 
+                });
+              }
+            }}
+            style={{ 
+              position: 'absolute',
+              left: `${layout.circles.nextShot.x}%`,
+              top: `${layout.circles.nextShot.y}%`,
+              width: layout.circles.nextShot.size,
+              height: layout.circles.nextShot.size,
+              zIndex: 5
+            }}
+            className={cn(
+              "rounded-full bg-white border border-slate-100 shadow-lg flex flex-col items-center justify-center p-3 text-center cursor-grab active:cursor-grabbing transition-shadow",
+              isEditingLayout && "ring-4 ring-emerald-200 ring-offset-2",
+              isEditingLayout && selectedCircle === 'nextShot' && "shadow-emerald-200/50 ring-emerald-400"
+            )}
+            onClick={(e) => {
+              if (isEditingLayout) {
+                e.stopPropagation();
+                setSelectedCircle('nextShot');
+              }
+            }}
+          >
+            <Syringe className="w-5 h-5 text-emerald-600 mb-1.5" />
+            <p className="text-sm font-black text-slate-900 leading-tight">
               {nextShotDate ? format(nextShotDate, 'MMM d') : '--'}
             </p>
-            <p className="text-[8px] text-slate-400 uppercase font-bold tracking-tighter">Next Shot</p>
-          </div>
-        </div>
+            <p className="text-[9px] text-slate-400 uppercase font-bold tracking-tighter">Next Shot</p>
+            {isEditingLayout && selectedCircle === 'nextShot' && (
+              <div 
+                className="absolute -bottom-14 left-1/2 -translate-x-1/2 w-48 bg-white/95 backdrop-blur rounded-xl p-3 shadow-xl border border-emerald-100 z-50 animate-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Size</span>
+                  <span className="text-[10px] font-bold text-emerald-600">{layout.circles.nextShot.size}px</span>
+                </div>
+                <input 
+                  type="range" min="80" max="180" 
+                  value={layout.circles.nextShot.size}
+                  onChange={(e) => updateLayout('nextShot', { size: parseInt(e.target.value) })}
+                  className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                />
+              </div>
+            )}
+          </motion.div>
 
-        {/* Update Weight Circle */}
-        <button 
-          onClick={() => setShowAddWeight(true)}
-          className="flex flex-col items-center gap-2 group"
-        >
-          <div className="w-24 h-24 rounded-full bg-emerald-600 shadow-lg flex flex-col items-center justify-center p-2 text-center text-white group-hover:bg-emerald-700 transition-all active:scale-95">
-            <Scale className="w-5 h-5 mb-1" />
-            <p className="text-[10px] font-bold uppercase tracking-wider">Update</p>
-            <p className="text-[8px] text-emerald-100 uppercase font-bold">Weight</p>
-          </div>
-        </button>
+          {/* Update Weight Circle */}
+          <motion.div 
+            drag={isEditingLayout}
+            dragMomentum={false}
+            dragConstraints={containerRef}
+            dragElastic={0}
+            onPointerDown={() => isEditingLayout && setSelectedCircle('updateWeight')}
+            onDragEnd={(_, info) => {
+              if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                const circleSize = layout.circles.updateWeight.size;
+                let x = ((info.point.x - rect.left - circleSize / 2) / rect.width) * 100;
+                let y = ((info.point.y - rect.top - circleSize / 2) / rect.height) * 100;
+                const xLimit = (1 - circleSize / rect.width) * 100;
+                const yLimit = (1 - circleSize / rect.height) * 100;
+                updateLayout('updateWeight', { 
+                  x: Math.max(0, Math.min(xLimit, x)), 
+                  y: Math.max(0, Math.min(yLimit, y)) 
+                });
+              }
+            }}
+            style={{ 
+              position: 'absolute',
+              left: `${layout.circles.updateWeight.x}%`,
+              top: `${layout.circles.updateWeight.y}%`,
+              width: layout.circles.updateWeight.size,
+              height: layout.circles.updateWeight.size,
+              zIndex: 15
+            }}
+            className={cn(
+              "rounded-full bg-emerald-600 shadow-2xl flex flex-col items-center justify-center p-3 text-center text-white cursor-grab active:cursor-grabbing transition-shadow",
+              isEditingLayout && "ring-4 ring-emerald-200 ring-offset-2",
+              isEditingLayout && selectedCircle === 'updateWeight' && "shadow-emerald-200/50 ring-emerald-400"
+            )}
+            onClick={(e) => {
+              if (isEditingLayout) {
+                e.stopPropagation();
+                setSelectedCircle('updateWeight');
+              }
+            }}
+          >
+            <button 
+              onClick={() => !isEditingLayout && setShowAddWeight(true)}
+              className="flex flex-col items-center group pointer-events-auto"
+            >
+              <Scale className="w-7 h-7 mb-2" />
+              <p className="text-xs font-bold uppercase tracking-wider">Update</p>
+              <p className="text-[10px] text-emerald-100 uppercase font-bold">Weight</p>
+            </button>
+            {isEditingLayout && selectedCircle === 'updateWeight' && (
+              <div 
+                className="absolute -bottom-14 left-1/2 -translate-x-1/2 w-48 bg-white/95 backdrop-blur rounded-xl p-3 shadow-xl border border-emerald-100 z-50 animate-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Size</span>
+                  <span className="text-[10px] font-bold text-emerald-600">{layout.circles.updateWeight.size}px</span>
+                </div>
+                <input 
+                  type="range" min="80" max="180" 
+                  value={layout.circles.updateWeight.size}
+                  onChange={(e) => updateLayout('updateWeight', { size: parseInt(e.target.value) })}
+                  className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                />
+              </div>
+            )}
+          </motion.div>
 
-        {/* BMI Circle */}
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-24 h-24 rounded-full bg-white border border-slate-100 shadow-sm flex flex-col items-center justify-center p-2 text-center">
-            <User className="w-4 h-4 text-slate-400 mb-1" />
-            <p className="text-xs font-black text-slate-900 leading-tight">
+          {/* BMI Circle */}
+          <motion.div 
+            drag={isEditingLayout}
+            dragMomentum={false}
+            dragConstraints={containerRef}
+            dragElastic={0}
+            onPointerDown={() => isEditingLayout && setSelectedCircle('bmi')}
+            onDragEnd={(_, info) => {
+              if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                const circleSize = layout.circles.bmi.size;
+                let x = ((info.point.x - rect.left - circleSize / 2) / rect.width) * 100;
+                let y = ((info.point.y - rect.top - circleSize / 2) / rect.height) * 100;
+                const xLimit = (1 - circleSize / rect.width) * 100;
+                const yLimit = (1 - circleSize / rect.height) * 100;
+                updateLayout('bmi', { 
+                  x: Math.max(0, Math.min(xLimit, x)), 
+                  y: Math.max(0, Math.min(yLimit, y)) 
+                });
+              }
+            }}
+            style={{ 
+              position: 'absolute',
+              left: `${layout.circles.bmi.x}%`,
+              top: `${layout.circles.bmi.y}%`,
+              width: layout.circles.bmi.size,
+              height: layout.circles.bmi.size,
+              zIndex: 5
+            }}
+            className={cn(
+              "rounded-full bg-white border border-slate-100 shadow-lg flex flex-col items-center justify-center p-3 text-center cursor-grab active:cursor-grabbing transition-shadow",
+              isEditingLayout && "ring-4 ring-emerald-200 ring-offset-2",
+              isEditingLayout && selectedCircle === 'bmi' && "shadow-emerald-200/50 ring-emerald-400"
+            )}
+            onClick={(e) => {
+              if (isEditingLayout) {
+                e.stopPropagation();
+                setSelectedCircle('bmi');
+              }
+            }}
+          >
+            <User className="w-6 h-6 text-slate-400 mb-2" />
+            <p className="text-base font-black text-slate-900 leading-tight">
               {currentBMI || '--'}
             </p>
-            <p className="text-[8px] text-slate-400 uppercase font-bold tracking-tighter">Current BMI</p>
-          </div>
+            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">Current BMI</p>
+            {isEditingLayout && selectedCircle === 'bmi' && (
+              <div 
+                className="absolute -bottom-14 left-1/2 -translate-x-1/2 w-48 bg-white/95 backdrop-blur rounded-xl p-3 shadow-xl border border-emerald-100 z-50 animate-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Size</span>
+                  <span className="text-[10px] font-bold text-emerald-600">{layout.circles.bmi.size}px</span>
+                </div>
+                <input 
+                  type="range" min="80" max="180" 
+                  value={layout.circles.bmi.size}
+                  onChange={(e) => updateLayout('bmi', { size: parseInt(e.target.value) })}
+                  className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                />
+              </div>
+            )}
+          </motion.div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const ShotsView = () => (
     <div className="space-y-6 pb-24">
@@ -554,9 +906,17 @@ export default function App() {
                   dataKey="weight" 
                   stroke="#10b981" 
                   strokeWidth={3} 
-                  dot={{ fill: '#10b981', r: 4 }} 
-                  activeDot={{ r: 6, strokeWidth: 0 }}
-                />
+                  dot={{ fill: '#10b981', r: 5 }} 
+                  activeDot={{ r: 8, strokeWidth: 0 }}
+                  isAnimationActive={false}
+                >
+                  <LabelList 
+                    dataKey="weight" 
+                    position="top" 
+                    offset={10} 
+                    style={{ fontSize: '10px', fontWeight: 'bold', fill: '#065f46' }} 
+                  />
+                </Line>
               </ReChart>
             </ResponsiveContainer>
           )}
@@ -604,9 +964,17 @@ export default function App() {
                         dataKey="value" 
                         stroke="#3b82f6" 
                         strokeWidth={2} 
-                        dot={{ fill: '#3b82f6', r: 3 }} 
-                        activeDot={{ r: 5, strokeWidth: 0 }}
-                      />
+                        dot={{ fill: '#3b82f6', r: 4 }} 
+                        activeDot={{ r: 6, strokeWidth: 0 }}
+                        isAnimationActive={false}
+                      >
+                        <LabelList 
+                          dataKey="value" 
+                          position="top" 
+                          offset={8} 
+                          style={{ fontSize: '8px', fontWeight: 'bold', fill: '#1e40af' }} 
+                        />
+                      </Line>
                     </ReChart>
                   </ResponsiveContainer>
                 </Card>
@@ -1068,6 +1436,25 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Layout</label>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-between"
+                  onClick={() => {
+                    setIsEditingLayout(true);
+                    setShowSettings(false);
+                    setActiveTab('dashboard');
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Move className="w-4 h-4" />
+                    <span>Personalise Dashboard</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
               </div>
 
               <div className="pt-4">

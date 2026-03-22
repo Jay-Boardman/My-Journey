@@ -22,6 +22,27 @@ export interface BodyMeasurementEntry {
   arms?: number;
 }
 
+export interface CircleLayout {
+  id: string;
+  x: number; // Percentage from left
+  y: number; // Percentage from top
+  size: number; // Diameter in pixels
+}
+
+export interface DashboardLayout {
+  circles: { [key: string]: CircleLayout };
+}
+
+export const DEFAULT_LAYOUT: DashboardLayout = {
+  circles: {
+    currentWeight: { id: 'currentWeight', x: 5, y: 5, size: 192 },
+    totalLost: { id: 'totalLost', x: 55, y: 45, size: 144 },
+    nextShot: { id: 'nextShot', x: 5, y: 75, size: 112 },
+    updateWeight: { id: 'updateWeight', x: 38, y: 70, size: 128 },
+    bmi: { id: 'bmi', x: 70, y: 75, size: 112 },
+  }
+};
+
 export const INJECTION_SITES = [
   'Left Abdomen',
   'Right Abdomen',
